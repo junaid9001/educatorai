@@ -42,35 +42,82 @@ export async function POST(req: Request) {
     } catch (e) {
       console.error('Transcript fetch failed. Attempting Whisper fallback...', e);
       
-      // Fallback: Download audio and transcribe using Whisper
+      // Fallback: Download audio using RapidAPI and transcribe using Whisper
       const tmpDir = os.tmpdir();
-      const fileName = `audio-${Date.now()}.mp4`;
+      const fileName = `audio-${Date.now()}.mp3`;
       const filePath = path.join(tmpDir, fileName);
 
       try {
-        const yt = await Innertube.create();
-        const stream = await yt.download(videoId, {
-          type: 'audio',
-          quality: 'bestefficiency',
-          format: 'mp4'
-        });
+        const rapidApiKey = process.env.RAPIDAPI_KEY;
+        const rapidApiHost = process.env.RAPIDAPI_HOST;
 
-        const writeStream = fs.createWriteStream(filePath);
-        const reader = stream.getReader();
+        if (!rapidApiKey || !rapidApiHost) {
+          throw new Error('RapidAPI credentials not configured');
+        }
+
+        console.log('Triggering RapidAPI download...');
+        const downloadUrlApi = `https://${rapidApiHost}/api/v1/download?format=mp3&id=${videoId}&audioQuality=128&addInfo=false&allowExtendedDuration=false`;
+        const downloadRes = await fetch(downloadUrlApi, {
+          headers: {
+            'x-rapidapi-host': rapidApiHost,
+            'x-rapidapi-key': rapidApiKey
+          }
+        });
+        const downloadData = await downloadRes.json();
         
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          if (value) {
-            writeStream.write(Buffer.from(value));
+        if (!downloadData.success || !downloadData.progressId) {
+          throw new Error('RapidAPI download failed: ' + JSON.stringify(downloadData));
+        }
+
+        const progressId = downloadData.progressId;
+        
+        console.log('Polling RapidAPI progress...');
+        let finalDownloadUrl = null;
+        let attempts = 0;
+        const maxAttempts = 15; // 30 seconds max (15 * 2s)
+
+        while (attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          attempts++;
+
+          const progressRes = await fetch(`https://${rapidApiHost}/api/v1/progress?id=${progressId}`, {
+            headers: {
+              'x-rapidapi-host': rapidApiHost,
+              'x-rapidapi-key': rapidApiKey
+            }
+          });
+          const progressData = await progressRes.json();
+
+          if (progressData.finished && progressData.downloadUrl) {
+            finalDownloadUrl = progressData.downloadUrl;
+            break;
           }
         }
-        writeStream.end();
 
-        // Wait for file to finish writing
-        await new Promise<void>((resolve) => writeStream.on('finish', () => resolve()));
+        if (!finalDownloadUrl) {
+          throw new Error('RapidAPI polling timed out');
+        }
 
-        // Transcribe Audio using Whisper
+        console.log('Downloading audio file from proxy...');
+        const audioRes = await fetch(finalDownloadUrl);
+        if (!audioRes.ok) throw new Error('Failed to download audio file from proxy');
+
+        const fileStream = fs.createWriteStream(filePath);
+        if (audioRes.body) {
+           const reader = audioRes.body.getReader();
+           while (true) {
+             const { done, value } = await reader.read();
+             if (done) break;
+             if (value) {
+               fileStream.write(Buffer.from(value));
+             }
+           }
+        }
+        fileStream.end();
+
+        await new Promise<void>((resolve) => fileStream.on('finish', () => resolve()));
+
+        console.log('Transcribing Audio using Whisper...');
         const transcriptionResponse: any = await groq.audio.transcriptions.create({
           file: fs.createReadStream(filePath),
           model: 'whisper-large-v3-turbo',
@@ -78,11 +125,10 @@ export async function POST(req: Request) {
         });
 
         rawTranscriptText = typeof transcriptionResponse === 'string' ? transcriptionResponse : transcriptionResponse?.text;
-      } catch (fallbackError) {
+      } catch (fallbackError: any) {
         console.error('Whisper fallback also failed:', fallbackError);
         throw new Error('Could not fetch transcript or download audio. Please ensure the video has closed captions (CC) enabled, or try another video.');
       } finally {
-        // Clean up temp file
         try {
           if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
