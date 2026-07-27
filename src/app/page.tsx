@@ -27,9 +27,10 @@ export default function Home() {
 
   const handlePinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value.replace(/\D/g, ''); // only digits
-    if (val.length <= 4) {
+    const targetPin = process.env.NEXT_PUBLIC_APP_PIN || '4444';
+    if (val.length <= targetPin.length) {
       setPin(val);
-      if (val === '4444') {
+      if (val === targetPin) {
         setIsAuthenticated(true);
       }
     }
@@ -113,6 +114,7 @@ export default function Home() {
   };
 
   if (!isAuthenticated) {
+    const targetPin = process.env.NEXT_PUBLIC_APP_PIN || '4444';
     return (
       <main className="auth-container">
         <div className="auth-card">
@@ -120,7 +122,7 @@ export default function Home() {
             <Lock size={32} className="auth-icon" />
           </div>
           <h1>Enter PIN</h1>
-          <p>This tool is locked. Please enter your 4-digit PIN.</p>
+          <p>This tool is locked. Please enter your PIN.</p>
           
           <div className="pin-input-container">
             <input 
@@ -132,7 +134,7 @@ export default function Home() {
               className="pin-input"
             />
           </div>
-          {pin.length === 4 && pin !== '4444' && (
+          {pin.length === targetPin.length && pin !== targetPin && (
             <p className="error-text">Incorrect PIN. Try again.</p>
           )}
         </div>
