@@ -68,7 +68,7 @@ export async function POST(req: Request) {
         writeStream.end();
 
         // Wait for file to finish writing
-        await new Promise((resolve) => writeStream.on('finish', resolve));
+        await new Promise<void>((resolve) => writeStream.on('finish', () => resolve()));
 
         // Transcribe Audio using Whisper
         const transcriptionResponse: any = await groq.audio.transcriptions.create({
