@@ -86,8 +86,8 @@ export default function Home() {
         let finalDownloadUrl = null;
         let attempts = 0;
         
-        while (attempts < 15) {
-          await new Promise(r => setTimeout(r, 2000));
+        while (attempts < 10) {
+          await new Promise(r => setTimeout(r, 10000));
           attempts++;
           
           const pollRes = await fetch('/api/fallback-poll', {
