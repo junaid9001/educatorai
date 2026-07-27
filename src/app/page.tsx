@@ -106,17 +106,27 @@ export default function Home() {
         
         if (!finalDownloadUrl) throw new Error('Audio conversion timed out');
         
-        setFallbackStatus('Running AI transcription (Whisper) & Generation (LLaMA)...');
-        const finalRes = await fetch('/api/fallback-transcribe', {
+        setFallbackStatus('Downloading & transcribing audio (Whisper)...');
+        const transcribeRes = await fetch('/api/fallback-transcribe', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ downloadUrl: finalDownloadUrl, url }),
         });
         
-        const finalData = await finalRes.json();
-        if (!finalRes.ok) throw new Error(finalData.error || 'Failed to transcribe audio');
+        const transcribeData = await transcribeRes.json();
+        if (!transcribeRes.ok) throw new Error(transcribeData.error || 'Failed to transcribe audio');
         
-        data = finalData;
+        setFallbackStatus('Translating & generating questions (LLaMA)...');
+        const generateRes = await fetch('/api/generate-qa', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transcriptText: transcribeData.transcriptText, url }),
+        });
+        
+        const generateData = await generateRes.json();
+        if (!generateRes.ok) throw new Error(generateData.error || 'Failed to generate Q&A');
+        
+        data = generateData;
       }
 
       setQaData(data.qa);
