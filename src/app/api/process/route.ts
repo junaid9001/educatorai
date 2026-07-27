@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 import { YoutubeTranscript } from 'youtube-transcript';
+import { Innertube } from 'youtubei.js';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import translate from 'google-translate-api-x';
 import Groq from 'groq-sdk';
 import { supabase } from '@/lib/supabase';
@@ -36,8 +40,57 @@ export async function POST(req: Request) {
       const transcriptArray = await YoutubeTranscript.fetchTranscript(videoId);
       rawTranscriptText = transcriptArray.map(t => t.text).join(' ');
     } catch (e) {
-      console.error('Transcript fetch failed:', e);
-      throw new Error('Could not fetch transcript. Please ensure the video has closed captions (CC) enabled, or try another video.');
+      console.error('Transcript fetch failed. Attempting Whisper fallback...', e);
+      
+      // Fallback: Download audio and transcribe using Whisper
+      const tmpDir = os.tmpdir();
+      const fileName = `audio-${Date.now()}.mp4`;
+      const filePath = path.join(tmpDir, fileName);
+
+      try {
+        const yt = await Innertube.create();
+        const stream = await yt.download(videoId, {
+          type: 'audio',
+          quality: 'bestefficiency',
+          format: 'mp4'
+        });
+
+        const writeStream = fs.createWriteStream(filePath);
+        const reader = stream.getReader();
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            writeStream.write(Buffer.from(value));
+          }
+        }
+        writeStream.end();
+
+        // Wait for file to finish writing
+        await new Promise((resolve) => writeStream.on('finish', resolve));
+
+        // Transcribe Audio using Whisper
+        const transcriptionResponse: any = await groq.audio.transcriptions.create({
+          file: fs.createReadStream(filePath),
+          model: 'whisper-large-v3-turbo',
+          response_format: 'text',
+        });
+
+        rawTranscriptText = typeof transcriptionResponse === 'string' ? transcriptionResponse : transcriptionResponse?.text;
+      } catch (fallbackError) {
+        console.error('Whisper fallback also failed:', fallbackError);
+        throw new Error('Could not fetch transcript or download audio. Please ensure the video has closed captions (CC) enabled, or try another video.');
+      } finally {
+        // Clean up temp file
+        try {
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        } catch (cleanupErr) {
+          console.error('Failed to delete temp audio file:', cleanupErr);
+        }
+      }
     }
 
     if (!rawTranscriptText || rawTranscriptText.trim().length === 0) {

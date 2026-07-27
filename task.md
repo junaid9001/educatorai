@@ -1,0 +1,6 @@
+- `[ ]` Re-add `youtubei.js`, `fs`, `os`, `path` imports to backend
+- `[ ]` Implement audio download and Groq Whisper transcription as fallback in `route.ts`
+- `[ ]` Route Whisper output through Google Translate script
+- `[ ]` Update `page.tsx` UI to add "Download Both" button and separate individual buttons
+- `[ ]` Verify build
+- `[ ]` Update walkthrough.md

@@ -210,12 +210,23 @@ export default function Home() {
                 <p>Generated {qaData.length} questions perfectly tailored to 10th standard.</p>
                 
                 <div className="action-buttons">
-                  <button onClick={() => generatePDF(qaData, 'student')} className="btn btn-primary">
-                    <Download size={20} /> Student Paper
+                  <button 
+                    onClick={() => {
+                      generatePDF(qaData, 'student');
+                      setTimeout(() => generatePDF(qaData, 'validator'), 500); // Small delay to prevent browser blocking
+                    }} 
+                    className="btn btn-primary"
+                  >
+                    <Download size={20} /> Download Both PDFs
                   </button>
-                  <button onClick={() => generatePDF(qaData, 'validator')} className="btn btn-secondary">
-                    <Download size={20} /> Validator Key
-                  </button>
+                  <div className="grouped-buttons-row">
+                    <button onClick={() => generatePDF(qaData, 'student')} className="btn btn-secondary flex-btn">
+                      <Download size={16} /> Student Only
+                    </button>
+                    <button onClick={() => generatePDF(qaData, 'validator')} className="btn btn-secondary flex-btn">
+                      <Download size={16} /> Validator Only
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

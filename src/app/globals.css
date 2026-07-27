@@ -384,6 +384,17 @@ body::after {
   gap: 12px;
 }
 
+.grouped-buttons-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.flex-btn {
+  flex: 1;
+}
+
 /* History List */
 .history-container {
   display: flex;
