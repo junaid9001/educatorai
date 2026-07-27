@@ -14,6 +14,7 @@ export default function Home() {
   
   const [url, setUrl] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [fallbackStatus, setFallbackStatus] = useState('');
   const [errorText, setErrorText] = useState('');
   const [qaData, setQaData] = useState<QAItem[]>([]);
   const [history, setHistory] = useState<any[]>([]);
@@ -52,6 +53,7 @@ export default function Home() {
     e.preventDefault();
     if (!url) return;
     setStatus('loading');
+    setFallbackStatus('');
     setErrorText('');
     setQaData([]);
 
@@ -62,19 +64,70 @@ export default function Home() {
         body: JSON.stringify({ url }),
       });
 
-      const data = await response.json();
+      let data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to process video');
       }
 
+      if (data.fallbackRequired) {
+        setFallbackStatus('Fast scraper failed. Triggering AI audio extraction...');
+        const startRes = await fetch('/api/fallback-start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoId: data.videoId }),
+        });
+        const startData = await startRes.json();
+        
+        if (!startRes.ok) throw new Error(startData.error || 'Failed to trigger audio fallback');
+        const progressId = startData.progressId;
+        
+        setFallbackStatus('Extracting & converting audio... (this may take a few seconds)');
+        let finalDownloadUrl = null;
+        let attempts = 0;
+        
+        while (attempts < 15) {
+          await new Promise(r => setTimeout(r, 2000));
+          attempts++;
+          
+          const pollRes = await fetch('/api/fallback-poll', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ progressId }),
+          });
+          const pollData = await pollRes.json();
+          
+          if (!pollRes.ok) throw new Error(pollData.error || 'Polling failed');
+          if (pollData.finished && pollData.downloadUrl) {
+            finalDownloadUrl = pollData.downloadUrl;
+            break;
+          }
+        }
+        
+        if (!finalDownloadUrl) throw new Error('Audio conversion timed out');
+        
+        setFallbackStatus('Running AI transcription (Whisper) & Generation (LLaMA)...');
+        const finalRes = await fetch('/api/fallback-transcribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ downloadUrl: finalDownloadUrl, url }),
+        });
+        
+        const finalData = await finalRes.json();
+        if (!finalRes.ok) throw new Error(finalData.error || 'Failed to transcribe audio');
+        
+        data = finalData;
+      }
+
       setQaData(data.qa);
       setStatus('success');
+      setFallbackStatus('');
       fetchHistory();
     } catch (err: any) {
       console.error('Frontend processing error:', err);
       setErrorText(err.message || 'An unexpected error occurred');
       setStatus('error');
+      setFallbackStatus('');
     }
   };
 
@@ -199,7 +252,7 @@ export default function Home() {
             {status === 'loading' && (
               <div className="status-box loading-box">
                 <div className="loader-spinner"></div>
-                <p>Analyzing video & generating questions...</p>
+                <p>{fallbackStatus ? fallbackStatus : 'Analyzing video & generating questions...'}</p>
               </div>
             )}
 
