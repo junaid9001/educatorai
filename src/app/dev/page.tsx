@@ -220,6 +220,42 @@ export default function DevDashboard() {
       const polledUrl = await pollForAudio(apiData.progressId);
       if (!polledUrl) { setRunning(false); return; }
       downloadUrl = polledUrl;
+    } else if (apiData.status === 'processing') {
+      addLog({ step: '2. Poll API', status: 'running', message: 'API returned "processing". Polling every 15s...' });
+      
+      let attempts = 0;
+      while (attempts < 20) {
+        await new Promise(r => setTimeout(r, 15000));
+        attempts++;
+        
+        const pollRes = await fetch('/api/dev-proxy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: rapidUrl, host: rapidHost, key: rapidKey })
+        });
+        const pollData = await pollRes.json();
+        const inner = pollData.data;
+        
+        updateLastLog({
+          status: 'running',
+          message: `Attempt ${attempts}: status=${inner?.status || 'unknown'}`,
+          data: inner
+        });
+        
+        if (inner?.status === 'ok' && inner?.link) {
+          downloadUrl = inner.link;
+          updateLastLog({
+            status: 'success',
+            message: `Audio ready! URL: ${inner.link.substring(0, 80)}...`,
+            data: inner
+          });
+          break;
+        } else if (inner?.status !== 'processing') {
+          updateLastLog({ status: 'error', message: 'API returned unexpected status' });
+          setRunning(false);
+          return;
+        }
+      }
     } else if (apiData.link) {
       downloadUrl = apiData.link;
       addLog({ step: '2. Direct Link', status: 'success', message: `API returned direct link: ${apiData.link.substring(0, 80)}...` });

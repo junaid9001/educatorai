@@ -43,6 +43,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ progressId: downloadData.progressId });
     }
 
+    // Handle youtube-mp36 API async processing
+    if (downloadData.status === 'processing') {
+      console.log(`[FALLBACK-START] ⏳ Processing... (Requires frontend polling)`);
+      return NextResponse.json({ isProcessing: true });
+    }
+
     console.log(`[FALLBACK-START] ✗ RapidAPI failed | Unrecognized response format`);
     throw new Error('RapidAPI download failed: ' + JSON.stringify(downloadData));
   } catch (error: any) {

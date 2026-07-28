@@ -86,6 +86,29 @@ export default function Home() {
         if (startData.directUrl) {
           // Direct-link API (like youtube-mp36) — no polling needed!
           finalDownloadUrl = startData.directUrl;
+        } else if (startData.isProcessing) {
+          // API is converting a large file, self-poll fallback-start every 15s
+          setFallbackStatus('Extracting & converting audio (large file)...');
+          let attempts = 0;
+          
+          while (attempts < 20) {
+            await new Promise(r => setTimeout(r, 15000));
+            attempts++;
+            
+            const pollRes = await fetch('/api/fallback-start', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ videoId: data.videoId }),
+            });
+            const pollData = await pollRes.json();
+            
+            if (pollData.directUrl) {
+              finalDownloadUrl = pollData.directUrl;
+              break;
+            } else if (!pollData.isProcessing && !pollData.progressId) {
+              throw new Error(pollData.error || 'Polling failed');
+            }
+          }
         } else if (startData.progressId) {
           // Polling-based API — poll until ready
           setFallbackStatus('Extracting & converting audio... (this may take a few seconds)');

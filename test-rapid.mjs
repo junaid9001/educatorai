@@ -1,21 +1,22 @@
-async function run() {
-  const url = 'https://youtube-mp4-mp3-downloader.p.rapidapi.com/api/v1/download?format=720&id=2epCxCCstn0&audioQuality=128&addInfo=false&allowExtendedDuration=false';
-  const options = {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-rapidapi-host': 'youtube-mp4-mp3-downloader.p.rapidapi.com',
-      'x-rapidapi-key': 'a6a90e3a92msh7b4a34962a832bdp1bf940jsn747cd1a2bddf'
-    }
-  };
+import fs from 'fs';
 
-  try {
-    console.log("Fetching RapidAPI...");
-    const response = await fetch(url, options);
-    const data = await response.json();
-    console.log("Response:", JSON.stringify(data, null, 2));
-  } catch (error) {
-    console.error(error);
-  }
+async function testApi() {
+  const rapidApiHost = 'youtube-mp36.p.rapidapi.com';
+  const rapidApiKey = 'a6a90e3a92msh7b4a34962a832bdp1bf940jsn747cd1a2bddf';
+  const videoId = 'UxxajLWwzqY'; // Khan academy video
+
+  const downloadUrlApi = `https://${rapidApiHost}/dl?id=${videoId}`;
+  console.log(`Calling: ${downloadUrlApi}`);
+  
+  const res = await fetch(downloadUrlApi, {
+    headers: {
+      'x-rapidapi-host': rapidApiHost,
+      'x-rapidapi-key': rapidApiKey
+    }
+  });
+  
+  const data = await res.json();
+  console.log(data);
 }
-run();
+
+testApi();
