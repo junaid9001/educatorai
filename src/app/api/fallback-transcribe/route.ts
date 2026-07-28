@@ -29,7 +29,17 @@ export async function POST(req: Request) {
     try {
       // Step 1: Download audio
       console.log(`[FALLBACK-TRANSCRIBE] → Step 1: Downloading audio from proxy...`);
-      const audioRes = await fetch(downloadUrl);
+      let audioRes = await fetch(downloadUrl);
+      
+      // Retry loop for CDN sync delays (sometimes cheap APIs return link before file is fully written)
+      let attempts = 1;
+      while (!audioRes.ok && audioRes.status === 404 && attempts <= 3) {
+        console.log(`[FALLBACK-TRANSCRIBE] ⚠ Step 1: 404 Not Found. Retrying in 3 seconds (Attempt ${attempts}/3)...`);
+        await new Promise(r => setTimeout(r, 3000));
+        audioRes = await fetch(downloadUrl);
+        attempts++;
+      }
+
       if (!audioRes.ok) {
         console.log(`[FALLBACK-TRANSCRIBE] ✗ Step 1: Download failed | HTTP ${audioRes.status} ${audioRes.statusText}`);
         throw new Error(`Failed to download audio file from proxy (HTTP ${audioRes.status})`);
