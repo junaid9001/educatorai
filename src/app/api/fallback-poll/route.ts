@@ -11,6 +11,7 @@ export async function POST(req: Request) {
     const rapidApiHost = process.env.RAPIDAPI_HOST;
 
     if (!rapidApiKey || !rapidApiHost) {
+      console.log(`[FALLBACK-POLL] ✗ Missing env vars | RAPIDAPI_KEY: ${rapidApiKey ? 'SET' : 'MISSING'} | RAPIDAPI_HOST: ${rapidApiHost ? 'SET' : 'MISSING'}`);
       throw new Error('RapidAPI credentials not configured');
     }
 
@@ -23,14 +24,16 @@ export async function POST(req: Request) {
     });
     
     const progressData = await progressRes.json();
+    console.log(`[FALLBACK-POLL] ← Progress (${progressRes.status}): finished=${progressData.finished} | ${JSON.stringify(progressData).substring(0, 300)}`);
 
     if (progressData.finished && progressData.downloadUrl) {
+      console.log(`[FALLBACK-POLL] ✅ Audio ready | URL: ${progressData.downloadUrl.substring(0, 80)}...`);
       return NextResponse.json({ finished: true, downloadUrl: progressData.downloadUrl });
     }
 
     return NextResponse.json({ finished: false });
   } catch (error: any) {
-    console.error('Fallback Poll API Error:', error);
+    console.error(`[FALLBACK-POLL] ❌ FATAL: ${error.message}`);
     return NextResponse.json({ error: error.message || 'An error occurred during polling' }, { status: 500 });
   }
 }

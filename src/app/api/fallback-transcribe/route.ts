@@ -14,8 +14,10 @@ export const runtime = 'nodejs';
 export const maxDuration = 60; // We still allow 60s max, but this should only take 30-40s
 
 export async function POST(req: Request) {
+  const startTime = Date.now();
   try {
     const { downloadUrl, url } = await req.json();
+    console.log(`[FALLBACK-TRANSCRIBE] ▶ Started | downloadUrl: ${downloadUrl?.substring(0, 80)}...`);
     if (!downloadUrl || !url) return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
 
     const tmpDir = os.tmpdir();
@@ -25,9 +27,13 @@ export async function POST(req: Request) {
     let rawTranscriptText = '';
 
     try {
-      console.log('Downloading audio file from proxy...');
+      // Step 1: Download audio
+      console.log(`[FALLBACK-TRANSCRIBE] → Step 1: Downloading audio from proxy...`);
       const audioRes = await fetch(downloadUrl);
-      if (!audioRes.ok) throw new Error('Failed to download audio file from proxy');
+      if (!audioRes.ok) {
+        console.log(`[FALLBACK-TRANSCRIBE] ✗ Step 1: Download failed | HTTP ${audioRes.status} ${audioRes.statusText}`);
+        throw new Error(`Failed to download audio file from proxy (HTTP ${audioRes.status})`);
+      }
 
       const fileStream = fs.createWriteStream(filePath);
       if (audioRes.body) {
@@ -41,10 +47,14 @@ export async function POST(req: Request) {
          }
       }
       fileStream.end();
-
       await new Promise<void>((resolve) => fileStream.on('finish', () => resolve()));
+      
+      const fileSizeBytes = fs.statSync(filePath).size;
+      const fileSizeMB = (fileSizeBytes / (1024 * 1024)).toFixed(2);
+      console.log(`[FALLBACK-TRANSCRIBE] ✓ Step 1: Downloaded | ${fileSizeMB} MB (${Date.now() - startTime}ms)`);
 
-      console.log('Chunking audio to bypass 25MB limit...');
+      // Step 2: Chunk audio
+      console.log(`[FALLBACK-TRANSCRIBE] → Step 2: Chunking audio to bypass 25MB limit...`);
       const fileBuffer = fs.readFileSync(filePath);
       const midpoint = Math.floor(fileBuffer.length / 2);
       
@@ -54,7 +64,12 @@ export async function POST(req: Request) {
       fs.writeFileSync(chunk1Path, fileBuffer.slice(0, midpoint));
       fs.writeFileSync(chunk2Path, fileBuffer.slice(midpoint));
       
-      console.log('Transcribing chunks in parallel using Whisper...');
+      const chunk1MB = (midpoint / (1024 * 1024)).toFixed(2);
+      const chunk2MB = ((fileBuffer.length - midpoint) / (1024 * 1024)).toFixed(2);
+      console.log(`[FALLBACK-TRANSCRIBE] ✓ Step 2: Chunked | Chunk1: ${chunk1MB} MB, Chunk2: ${chunk2MB} MB`);
+      
+      // Step 3: Transcribe in parallel
+      console.log(`[FALLBACK-TRANSCRIBE] → Step 3: Transcribing both chunks via Whisper (parallel)...`);
       const [res1, res2] = await Promise.all([
         groq.audio.transcriptions.create({
           file: fs.createReadStream(chunk1Path),
@@ -72,31 +87,34 @@ export async function POST(req: Request) {
       const text2 = typeof res2 === 'string' ? res2 : (res2 as any)?.text || '';
       
       rawTranscriptText = text1 + ' ' + text2;
+      console.log(`[FALLBACK-TRANSCRIBE] ✓ Step 3: Transcribed | ${rawTranscriptText.length} chars (${Date.now() - startTime}ms)`);
       
       try { 
         if (fs.existsSync(chunk1Path)) fs.unlinkSync(chunk1Path); 
         if (fs.existsSync(chunk2Path)) fs.unlinkSync(chunk2Path); 
       } catch (e) {}
     } catch (fallbackError: any) {
-      console.error('Whisper fallback also failed:', fallbackError);
-      throw new Error('Could not download proxy audio or transcribe using Whisper.');
+      console.error(`[FALLBACK-TRANSCRIBE] ✗ FAILED: ${fallbackError.message} (${Date.now() - startTime}ms)`);
+      throw new Error('Could not download proxy audio or transcribe using Whisper: ' + fallbackError.message);
     } finally {
       try {
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
         }
       } catch (cleanupErr) {
-        console.error('Failed to delete temp audio file:', cleanupErr);
+        console.error('[FALLBACK-TRANSCRIBE] ⚠ Failed to delete temp audio file:', cleanupErr);
       }
     }
 
     if (!rawTranscriptText || rawTranscriptText.trim().length === 0) {
-        throw new Error("Transcription failed or returned empty text.");
+      console.log(`[FALLBACK-TRANSCRIBE] ✗ Transcription returned empty text`);
+      throw new Error("Transcription failed or returned empty text.");
     }
 
+    console.log(`[FALLBACK-TRANSCRIBE] ✅ COMPLETE | ${rawTranscriptText.length} chars returned (${Date.now() - startTime}ms)`);
     return NextResponse.json({ transcriptText: rawTranscriptText });
   } catch (error: any) {
-    console.error('Fallback Transcribe API Error:', error);
+    console.error(`[FALLBACK-TRANSCRIBE] ❌ FATAL: ${error.message} (${Date.now() - startTime}ms)`);
     return NextResponse.json({ error: error.message || 'An error occurred during transcription processing' }, { status: 500 });
   }
 }
