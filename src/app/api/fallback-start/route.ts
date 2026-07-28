@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     }
     console.log(`[FALLBACK-START] ✓ Env vars loaded | Host: ${rapidApiHost}`);
 
-    const downloadUrlApi = `https://${rapidApiHost}/api/v1/download?format=mp3&id=${videoId}&audioQuality=128&addInfo=false&allowExtendedDuration=false`;
+    const downloadUrlApi = `https://${rapidApiHost}/dl?id=${videoId}`;
     console.log(`[FALLBACK-START] → Calling RapidAPI: ${downloadUrlApi}`);
     
     const downloadRes = await fetch(downloadUrlApi, {
@@ -31,13 +31,20 @@ export async function POST(req: Request) {
     const downloadData = await downloadRes.json();
     console.log(`[FALLBACK-START] ← RapidAPI response (${downloadRes.status}): ${JSON.stringify(downloadData).substring(0, 500)}`);
     
-    if (!downloadData.success || !downloadData.progressId) {
-      console.log(`[FALLBACK-START] ✗ RapidAPI failed | success=${downloadData.success} progressId=${downloadData.progressId}`);
-      throw new Error('RapidAPI download failed: ' + JSON.stringify(downloadData));
+    // Handle direct-link APIs (like youtube-mp36) that return a "link" field immediately
+    if (downloadData.status === 'ok' && downloadData.link) {
+      console.log(`[FALLBACK-START] ✅ COMPLETE (direct link) | URL: ${downloadData.link.substring(0, 80)}... (${Date.now() - startTime}ms)`);
+      return NextResponse.json({ directUrl: downloadData.link });
     }
 
-    console.log(`[FALLBACK-START] ✅ COMPLETE | progressId: ${downloadData.progressId} (${Date.now() - startTime}ms)`);
-    return NextResponse.json({ progressId: downloadData.progressId });
+    // Handle polling-based APIs that return a progressId
+    if (downloadData.success && downloadData.progressId) {
+      console.log(`[FALLBACK-START] ✅ COMPLETE (polling) | progressId: ${downloadData.progressId} (${Date.now() - startTime}ms)`);
+      return NextResponse.json({ progressId: downloadData.progressId });
+    }
+
+    console.log(`[FALLBACK-START] ✗ RapidAPI failed | Unrecognized response format`);
+    throw new Error('RapidAPI download failed: ' + JSON.stringify(downloadData));
   } catch (error: any) {
     console.error(`[FALLBACK-START] ❌ FATAL: ${error.message} (${Date.now() - startTime}ms)`);
     return NextResponse.json({ error: error.message || 'An error occurred during processing' }, { status: 500 });

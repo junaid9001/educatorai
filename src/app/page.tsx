@@ -80,31 +80,37 @@ export default function Home() {
         const startData = await startRes.json();
         
         if (!startRes.ok) throw new Error(startData.error || 'Failed to trigger audio fallback');
-        const progressId = startData.progressId;
         
-        setFallbackStatus('Extracting & converting audio... (this may take a few seconds)');
         let finalDownloadUrl = null;
-        let attempts = 0;
-        
-        while (attempts < 10) {
-          await new Promise(r => setTimeout(r, 10000));
-          attempts++;
+
+        if (startData.directUrl) {
+          // Direct-link API (like youtube-mp36) — no polling needed!
+          finalDownloadUrl = startData.directUrl;
+        } else if (startData.progressId) {
+          // Polling-based API — poll until ready
+          setFallbackStatus('Extracting & converting audio... (this may take a few seconds)');
+          let attempts = 0;
           
-          const pollRes = await fetch('/api/fallback-poll', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ progressId }),
-          });
-          const pollData = await pollRes.json();
-          
-          if (!pollRes.ok) throw new Error(pollData.error || 'Polling failed');
-          if (pollData.finished && pollData.downloadUrl) {
-            finalDownloadUrl = pollData.downloadUrl;
-            break;
+          while (attempts < 10) {
+            await new Promise(r => setTimeout(r, 10000));
+            attempts++;
+            
+            const pollRes = await fetch('/api/fallback-poll', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ progressId: startData.progressId }),
+            });
+            const pollData = await pollRes.json();
+            
+            if (!pollRes.ok) throw new Error(pollData.error || 'Polling failed');
+            if (pollData.finished && pollData.downloadUrl) {
+              finalDownloadUrl = pollData.downloadUrl;
+              break;
+            }
           }
         }
         
-        if (!finalDownloadUrl) throw new Error('Audio conversion timed out');
+        if (!finalDownloadUrl) throw new Error('Audio conversion timed out or failed');
         
         setFallbackStatus('Downloading & transcribing audio (Whisper)...');
         const transcribeRes = await fetch('/api/fallback-transcribe', {
