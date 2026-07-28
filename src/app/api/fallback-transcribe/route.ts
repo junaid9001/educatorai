@@ -44,14 +44,39 @@ export async function POST(req: Request) {
 
       await new Promise<void>((resolve) => fileStream.on('finish', () => resolve()));
 
-      console.log('Transcribing Audio using Whisper...');
-      const transcriptionResponse: any = await groq.audio.transcriptions.create({
-        file: fs.createReadStream(filePath),
-        model: 'whisper-large-v3-turbo',
-        response_format: 'text',
-      });
-
-      rawTranscriptText = typeof transcriptionResponse === 'string' ? transcriptionResponse : transcriptionResponse?.text;
+      console.log('Chunking audio to bypass 25MB limit...');
+      const fileBuffer = fs.readFileSync(filePath);
+      const midpoint = Math.floor(fileBuffer.length / 2);
+      
+      const chunk1Path = filePath + '_1.mp3';
+      const chunk2Path = filePath + '_2.mp3';
+      
+      fs.writeFileSync(chunk1Path, fileBuffer.slice(0, midpoint));
+      fs.writeFileSync(chunk2Path, fileBuffer.slice(midpoint));
+      
+      console.log('Transcribing chunks in parallel using Whisper...');
+      const [res1, res2] = await Promise.all([
+        groq.audio.transcriptions.create({
+          file: fs.createReadStream(chunk1Path),
+          model: 'whisper-large-v3-turbo',
+          response_format: 'text',
+        }),
+        groq.audio.transcriptions.create({
+          file: fs.createReadStream(chunk2Path),
+          model: 'whisper-large-v3-turbo',
+          response_format: 'text',
+        })
+      ]);
+      
+      const text1 = typeof res1 === 'string' ? res1 : (res1 as any)?.text || '';
+      const text2 = typeof res2 === 'string' ? res2 : (res2 as any)?.text || '';
+      
+      rawTranscriptText = text1 + ' ' + text2;
+      
+      try { 
+        if (fs.existsSync(chunk1Path)) fs.unlinkSync(chunk1Path); 
+        if (fs.existsSync(chunk2Path)) fs.unlinkSync(chunk2Path); 
+      } catch (e) {}
     } catch (fallbackError: any) {
       console.error('Whisper fallback also failed:', fallbackError);
       throw new Error('Could not download proxy audio or transcribe using Whisper.');

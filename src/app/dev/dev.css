@@ -1,0 +1,111 @@
+.dev-container {
+  max-width: 800px;
+  margin: 40px auto;
+  padding: 30px;
+  background-color: #1a1a2e;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+}
+
+.dev-container h1 {
+  font-size: 28px;
+  margin-bottom: 10px;
+  background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.dev-container .subtitle {
+  color: #a0aec0;
+  margin-bottom: 30px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #cbd5e1;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 12px 15px;
+  background-color: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 16px;
+  transition: all 0.3s ease;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #a855f7;
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.2);
+}
+
+.test-btn {
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 10px;
+}
+
+.test-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-2px);
+}
+
+.test-btn:disabled {
+  background: #475569;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.result-box, .error-box {
+  margin-top: 30px;
+  padding: 20px;
+  border-radius: 8px;
+}
+
+.result-box {
+  background-color: #0f172a;
+  border: 1px solid #334155;
+}
+
+.error-box {
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 1px solid #ef4444;
+}
+
+.result-box h3, .error-box h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  font-size: 18px;
+}
+
+.error-box h3 {
+  color: #ef4444;
+}
+
+.result-box pre {
+  background-color: #000;
+  padding: 15px;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 14px;
+  color: #10b981;
+}
